@@ -18,3 +18,24 @@ python -m venv my_rag_project_venv
 # 3. Reinstall Dependencies
 pip install langchain-community chromadb openai tiktoken pypdf python-dotenv 
 
+Error: ModuleNotFoundError: No module named 'langchain.text_splitter'
+
+Start Python Interpreter: In your activated PowerShell terminal, type
+  python
+Run the Search Code: Paste the following lines into the Python interpreter (at the >>> prompt) and press Enter after each line:
+  import langchain_text_splitters
+  print("Successfully imported text-splitters module.")
+  # Attempt to find the class directly in this known package
+  try:
+      from langchain_text_splitters import RecursiveCharacterTextSplitter
+      print("\nSUCCESS! TextSplitter was found successfully.")
+  except ModuleNotFoundError as e:
+      print(f"\nFAILURE (As Expected): {e}")
+  
+  # If the above fails, we try a slightly broader search on the main langchain package just in case.
+  import langchain 
+  print("\nChecking main 'langchain' package structure...")
+  # This command might output a lot of info but helps confirm if anything related to splitting is visible at the top level
+  dir(langchain) 
+  
+  exit() # Type exit() when done to leave the Python interpreter
