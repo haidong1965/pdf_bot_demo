@@ -11,6 +11,22 @@ from pathlib import Path
 import time 
 import chromadb # Make sure to import the library
 
+from dotenv import load_dotenv
+from google import genai # <-- Import the correct library
+
+# Add this near your other imports:
+from tenacity import retry, stop_after_attempt, wait_exponential, RetryError 
+
+# 1. Load API Key from .env file
+load_dotenv()
+API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not API_KEY:
+    raise ValueError("GEMINI_API_KEY not found. Please check your .env file.")
+
+model_name = 'all-MiniLM-L6-v2' 
+embedding_model = SentenceTransformer(model_name)
+
 # =====================================================================
 # ?? ALL NECESSARY IMPORTS (Using robust fallback imports)
 # =====================================================================
@@ -29,9 +45,6 @@ except ImportError:
     except ImportError as e:
          print(f"?? CRITICAL FAILURE: Cannot locate Text Splitter class in any known path. Error: {e}")
 
-
-# API Clients (These rely on the 'openai' library installed via pip)
-from openai import OpenAI 
 
 # Vector Store Client
 from chromadb import Client 
@@ -100,6 +113,85 @@ def generate_embeddings(chunks):
         print(f"? EMBEDDING FAILED (BGE): An error occurred during encoding. Details: {e}")
         return None
 
+def retrieve_context(query, embedding_model):
+    # 1. Embed the user's question
+    query_embedding = embedding_model.encode([query]) 
+    
+    COLLECTION_NAME = "rag_knowledge_base" 
+    client = chromadb.PersistentClient(path="./chroma_db") 
+    collection = client.get_collection(name=COLLECTION_NAME)
+
+    # 2. Query ChromaDB for the top K results
+    query_list = query_embedding.tolist() 
+
+    results = collection.query(
+        query_embeddings=query_list, # <-- No outer brackets needed!
+        n_results=5,                       
+        include=['documents', 'metadatas'] 
+    )
+    
+    return results['documents'][0] # Return the actual list of retrieved texts!
+
+# --- The FINAL Step: Passing Context to the LLM ---
+# You will take the output from retrieve_context(), combine it with your prompt, 
+# and feed it into a large language model (like GPT-4) for the final answer generation.
+
+def generate_answer(user_query: str, context: list[dict]) -> str:
+    """
+    Uses an LLM to synthesize a final answer based on the retrieved context and the original query.
+    """
+    if not context:
+        return "I could not find any relevant information in the knowledge base to answer your question."
+
+    # --- 1. Format the Context for the Prompt (KEEP THIS) ---
+    context_text = "\n---\n".join(
+        [f"Source Document Snippet:\n{item['document']}\n\nMetadata: {item['metadatas']}" 
+         for item in context]
+    )
+
+    # --- 2. Define the System Prompt (KEEP THIS) ---
+    system_prompt = f"""
+    You are an expert Q&A assistant. Your sole task is to answer user questions based ONLY on the context provided below.
+    If the context does not contain the information required to answer the question, you must reply with: "I do not have enough information in the provided documents to answer that."
+    Do not use external knowledge.
+
+    --- CONTEXT ---
+    {context_text}
+    """
+    gemini_client = genai.Client(api_key=API_KEY) 
+
+    # --- APPLYING RETRY LOGIC HERE ---
+    print("\n===================================================")
+    MAX_ATTEMPTS = 3
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            chat = gemini_client.chats.create(model='gemini-2.5-flash') 
+            full_user_message = f"Question: {user_query}"
+
+            # Attempt to send the message
+            response = chat.send_message(full_user_message, config={"system_instruction": system_prompt}) 
+            print("\nHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
+            return response.text # SUCCESS! Exit and return answer immediately.
+
+        except Exception as e:
+            print("\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+            error_msg = str(e)
+            # Check for common service unavailability indicators (like rate limits or server overload)
+            if "503" in error_msg or "UNAVAILABLE" in error_msg or "RATE_LIMIT" in error_msg:
+                if attempt < MAX_ATTEMPTS:
+                    wait_time = 2 ** attempt # Exponential backoff (2s, 4s, 8s...)
+                    print(f"\n?? Service temporarily unavailable ({error_msg[:50]}...). Retrying in {wait_time} seconds... (Attempt {attempt}/{MAX_ATTEMPTS})")
+                    time.sleep(wait_time)
+                else:
+                    # Failed after all retries
+                    print("\n?? Maximum retry attempts reached for service unavailability.")
+                    break # Exit the loop to fail gracefully below
+            else:
+                # This is a different, fatal error (like bad credentials or wrong model name). Do not retry.
+                raise e 
+
+    # If the loop finishes without returning, it means all retries failed due to service errors.
+    return "I apologize, but the knowledge base connection is currently unstable. Please try running this process again in a few minutes."
 
 def upsert_to_vectorstore(chunks, embeddings, metadatas):
     """Upserts document content and embeddings into ChromaDB using guaranteed unique IDs."""
@@ -109,7 +201,7 @@ def upsert_to_vectorstore(chunks, embeddings, metadatas):
 
     try:
         COLLECTION_NAME = "rag_knowledge_base" 
-        client = chromadb.Client() # Adjust client initialization if needed
+        client = chromadb.PersistentClient(path="./chroma_db")
         collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
         # --- 1. Generate GUARANTEED Unique IDs for ALL chunks (The Final Fix!) ---
@@ -213,3 +305,123 @@ def run_pipeline():
 
 if __name__ == "__main__":
     run_pipeline()
+    user_query = "What are the key takeaways from this document?"
+    
+# ------------------------------------------------------------
+# 1. RETRIEVE CONTEXT (The whole block)
+# ------------------------------------------------------------
+
+    # --- VARIABLES TO BE USED LATER (Define these before Phase 1) ---
+    user_query = "What is the main function of ChromaDB in this project?" # <<< CHANGE THIS to your user input!
+    context = []
+    collection = None # Initialize it to None first!
+    query_list = [] # Initialize query_list here!
+    
+    # ========================================
+    # PHASE 1: SETUP & CONNECTION (MUST RUN FIRST)
+    # ========================================
+    try:
+        print("\n[PHASE 1/3] Establishing Database Connection...")
+        client = chromadb.PersistentClient(path="./chroma_db") # Uses the folder INSIDE C:\ai\
+        COLLECTION_NAME = "rag_knowledge_base" 
+
+        # Attempt to get the collection object - This defines the 'collection' variable!
+        collection = client.get_collection(name=COLLECTION_NAME)
+        print("? Phase 1 Success: Database connection established.")
+    
+    except Exception as e:
+        print(f"? FATAL SETUP ERROR in Phase 1: Could not connect to the database. Details: {e}")
+        # If setup fails, we must exit gracefully before proceeding.
+        exit() 
+
+    # ========================================
+    # PHASE 1.5 (NEW): EMBEDDING GENERATION (BAAI BGE)
+    # ========================================
+    try:
+        print("\n[PHASE 1.5/3] Loading Embedding Model & Generating Embeddings...")
+        
+        # 1. Load the specific BAAI model
+        model_name = 'BAAI/bge-small-en-v1.5'
+        embedding_model = SentenceTransformer(model_name)
+        
+        # 2. Encode the user query text into a vector list
+        embeddings_result = embedding_model.encode(user_query)
+        
+        # ChromaDB expects the embeddings as a list of lists/arrays
+        query_list = [embeddings_result] # We wrap it in a list to match expected format for .query()
+        print("? Phase 1.5 Success: Embeddings generated and stored in 'query_list'.")
+
+    except Exception as e:
+        print(f"? ERROR during Phase 1.5 Embedding Generation: {e}")
+        # If embedding fails, we cannot proceed to query.
+        exit()
+
+    # ========================================
+    # PHASE 2: RETRIEVAL (Uses 'collection' from Phase 1)
+    # ========================================
+    if collection: # Check if the connection was successfully made in Phase 1
+        try:
+            print("\n[PHASE 2/3] Querying Knowledge Base...")
+            
+            # !!! IMPORTANT: Make sure query_list is defined somewhere above this block !!!
+            results = collection.query(
+                query_embeddings=query_list,  
+                n_results=5,                       
+                include=['documents', 'metadatas'] 
+            )
+
+            print("? Phase 2 Success: Context retrieved.")
+            
+            # Context Extraction Logic (Fixes the original NameError)
+            retrieved_documents = results['documents']
+            retrieved_metadatas = results['metadatas']
+
+            if len(retrieved_documents) != len(retrieved_metadatas):
+                print("?? Warning: Mismatch in retrieval results.")
+                context = []
+            else:
+                context = []
+                for doc_text, meta in zip(retrieved_documents, retrieved_metadatas):
+                    context.append({'document': doc_text, 'metadatas': meta})
+
+        except Exception as e:
+            print(f"? ERROR during Phase 2 Retrieval: {e}")
+            context = [] # Reset context on failure
+    else:
+        print("\n[PHASE 2/3] SKIPPED because database connection failed in Phase 1.")
+
+
+    # ========================================
+    # PHASE 3: ANSWER GENERATION (Uses 'context' from Phase 2)
+    # ========================================
+    if context: # Only run if we successfully gathered context data
+        print("\n[PHASE 3/3] Generating Final Answer...")
+        # MOCK DATA FOR TESTING (Replace with your actual pipeline flow)
+        mock_user_query = "What embedded server is used"
+
+
+        # Context simulates extracting specific process details from both sources
+        mock_context = [
+              {
+                "document": "The artifact spring-boot-starter-web is for Spring Web MVC, RESTful webservices and embedded Tomcat server.",
+                "metadatas": "Source: Configure Maven Dependencies"
+              }
+        ]
+    # 2. RUN THE LOGIC, passing the client object to the function
+        
+        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        try:
+            final_answer = generate_answer(user_query, context)
+        except Exception as e:
+            # If generating the answer fails completely (e.g., missing API key at the highest level)
+            print(f"\n? FATAL ERROR in main execution loop: {e}")
+            final_answer = "Could not generate an answer due to a critical system error."
+
+        
+        print("\n" + "="*50)
+        print("? PIPELINE COMPLETE ?")
+        print("? FINAL ANSWER:")
+        print(final_answer)
+        print("="*50)
+    else:
+        print("\n[PHASE 3/3] SKIPPED. Cannot generate an answer without context.")
