@@ -1,0 +1,20 @@
+You must run these commands as an Administrator for the first step to work correctly.
+
+Step 1: Run as Administrator
+Step 2: Change the Execution Policy
+In this elevated, Administrator PowerShell window, run this single command:
+  Set-ExecutionPolicy RemoteSigned -Scope Process
+
+Step 3: Re-run the Activation Commands
+# 1. Uninstall everything again (just to be safe after policy change)
+pip uninstall -y langchain langchain-openai pypdf chromadb openai tiktoken python-dotenv langchain-community 
+
+# 2. Create and Activate VEnv
+python -m venv my_rag_project_venv
+.\my_rag_project_venv\Scripts\Activate.ps1  # <-- THIS SHOULD NOW WORK!
+
+# (Your prompt should now show: (my_rag_project_venv))
+
+# 3. Reinstall Dependencies
+pip install langchain-community chromadb openai tiktoken pypdf python-dotenv 
+
