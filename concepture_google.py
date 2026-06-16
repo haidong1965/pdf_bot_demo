@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Comprehensive RAG Pipeline Script (Version 5 - Finalized Dependency Structure)
-=============================================================================
-?? IMPORTANT: Ensure you ran the dependency reinstall steps above before running this!
-=============================================================================
-"""
+
 from sentence_transformers import SentenceTransformer 
 import os
 from pathlib import Path
@@ -14,10 +9,8 @@ import chromadb # Make sure to import the library
 from dotenv import load_dotenv
 from google import genai # <-- Import the correct library
 
-# Add this near your other imports:
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError 
 
-# 1. Load API Key from .env file
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
 os.environ['HF_TOKEN'] ="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"
@@ -25,19 +18,12 @@ os.environ['HF_TOKEN'] ="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"
 if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found. Please check your .env file.")
 
-model_name = 'all-MiniLM-L6-v2' 
-embedding_model = SentenceTransformer(model_name)
-
-# =====================================================================
-# ?? ALL NECESSARY IMPORTS (Using robust fallback imports)
-# =====================================================================
 try:
     from langchain_community.document_loaders import PyPDFLoader # Loader for PDFs
 except ImportError as e:
     print(f"?? CRITICAL LIBRARY ERROR: Failed to load PDF loader. Did you reinstall dependencies? Error details: {e}")
 
 try:
-    # *** CRITICAL FIX ATTEMPT ***: Trying the most common fallback path for TextSplitter
     from langchain_text_splitters import RecursiveCharacterTextSplitter 
 except ImportError:
     print("?? WARNING: Could not find 'langchain_text_splitters'. Falling back to explicit core import.")
@@ -46,18 +32,7 @@ except ImportError:
     except ImportError as e:
          print(f"?? CRITICAL FAILURE: Cannot locate Text Splitter class in any known path. Error: {e}")
 
-
-# Vector Store Client
 from chromadb import Client 
-
-
-# =====================================================================
-# ?? EXTERNAL CLIENT INITIALIZATION
-# =====================================================================
-
-# =====================================================================
-# ?? EXTERNAL CLIENT INITIALIZATION (Run this block after imports)
-# =====================================================================
 
 # --- LOCAL EMBEDDING MODEL INITIALIZATION ---
 try:
@@ -114,28 +89,6 @@ def generate_embeddings(chunks):
         print(f"? EMBEDDING FAILED (BGE): An error occurred during encoding. Details: {e}")
         return None
 
-def retrieve_context(query, embedding_model):
-    # 1. Embed the user's question
-    query_embedding = embedding_model.encode([query]) 
-    
-    COLLECTION_NAME = "rag_knowledge_base" 
-    client = chromadb.PersistentClient(path="./chroma_db") 
-    collection = client.get_collection(name=COLLECTION_NAME)
-
-    # 2. Query ChromaDB for the top K results
-    query_list = query_embedding.tolist() 
-
-    results = collection.query(
-        query_embeddings=query_list, # <-- No outer brackets needed!
-        n_results=5,                       
-        include=['documents', 'metadatas'] 
-    )
-    
-    return results['documents'][0] # Return the actual list of retrieved texts!
-
-# --- The FINAL Step: Passing Context to the LLM ---
-# You will take the output from retrieve_context(), combine it with your prompt, 
-# and feed it into a large language model (like GPT-4) for the final answer generation.
 
 def generate_answer(user_query: str, context: list[dict]) -> str:
     """
@@ -162,7 +115,6 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
     gemini_client = genai.Client(api_key=API_KEY) 
 
     # --- APPLYING RETRY LOGIC HERE ---
-    print("\n===================================================")
     MAX_ATTEMPTS = 5
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
@@ -171,12 +123,9 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
             
             # Attempt to send the message
             response = chat.send_message(full_user_message, config={"system_instruction": system_prompt})
-            print("\nSUCCESS! Exit and return answer immediately")
-            print(response.text)
             return response.text # SUCCESS! Exit and return answer immediately.
 
         except Exception as e:
-            print("\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
             error_msg = str(e)
             # Check for common service unavailability indicators (like rate limits or server overload)
             if "503" in error_msg or "UNAVAILABLE" in error_msg or "RATE_LIMIT" in error_msg:
@@ -336,7 +285,7 @@ if __name__ == "__main__":
         exit() 
 
     # ========================================
-    # PHASE 1.5 (NEW): EMBEDDING GENERATION (BAAI BGE)
+    # PHASE 2: EMBEDDING GENERATION (BAAI BGE)
     # ========================================
     try:
         print("\n[PHASE 1.5/3] Loading Embedding Model & Generating Embeddings...")
@@ -358,7 +307,7 @@ if __name__ == "__main__":
         exit()
 
     # ========================================
-    # PHASE 2: RETRIEVAL (Uses 'collection' from Phase 1)
+    # PHASE 3: RETRIEVAL (Uses 'collection' from Phase 1)
     # ========================================
     if collection: # Check if the connection was successfully made in Phase 1
         try:
@@ -393,7 +342,7 @@ if __name__ == "__main__":
 
 
     # ========================================
-    # PHASE 3: ANSWER GENERATION (Uses 'context' from Phase 2)
+    # PHASE 4: ANSWER GENERATION (Uses 'context' from Phase 2)
     # ========================================
     if context: # Only run if we successfully gathered context data
         print("\n[PHASE 3/3] Generating Final Answer...")
@@ -406,8 +355,6 @@ if __name__ == "__main__":
               }
         ]
     # 2. RUN THE LOGIC, passing the client object to the function
-        
-        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         try:
             final_answer = generate_answer(user_query, mock_context)
         except Exception as e:
