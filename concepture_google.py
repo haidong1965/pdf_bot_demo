@@ -20,6 +20,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 # 1. Load API Key from .env file
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
+os.environ['HF_TOKEN'] ="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"
 
 if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found. Please check your .env file.")
@@ -85,7 +86,7 @@ except Exception as e:
 # !!! CONFIGURATION AREA (MANUALLY EDIT THESE) !!!
 # =====================================================================
 
-PDF_DIR = Path(r"C:\ai\pdf") # <<< ?? CHANGE THIS PATH! ??
+PDF_DIR = Path(r"C:\pdf_bot_demo\pdf") # <<< ?? CHANGE THIS PATH! ??
 
 EMBEDDING_MODEL_NAME = "text-embedding-ada-002" 
 # =====================================================================
@@ -162,15 +163,16 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
 
     # --- APPLYING RETRY LOGIC HERE ---
     print("\n===================================================")
-    MAX_ATTEMPTS = 3
+    MAX_ATTEMPTS = 5
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             chat = gemini_client.chats.create(model='gemini-2.5-flash') 
             full_user_message = f"Question: {user_query}"
-
+            
             # Attempt to send the message
-            response = chat.send_message(full_user_message, config={"system_instruction": system_prompt}) 
-            print("\nHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
+            response = chat.send_message(full_user_message, config={"system_instruction": system_prompt})
+            print("\nSUCCESS! Exit and return answer immediately")
+            print(response.text)
             return response.text # SUCCESS! Exit and return answer immediately.
 
         except Exception as e:
@@ -243,7 +245,7 @@ def run_pipeline():
     global documents, chunks
     documents = [] 
     chunks = []    
-
+    embeddings = None 
     print("\n" + "=" * 80)
     print("?? STARTING RAG PIPELINE: Document Ingestion Pipeline")
     print("=" * 80)
@@ -305,14 +307,13 @@ def run_pipeline():
 
 if __name__ == "__main__":
     run_pipeline()
-    user_query = "What are the key takeaways from this document?"
     
 # ------------------------------------------------------------
 # 1. RETRIEVE CONTEXT (The whole block)
 # ------------------------------------------------------------
 
     # --- VARIABLES TO BE USED LATER (Define these before Phase 1) ---
-    user_query = "What is the main function of ChromaDB in this project?" # <<< CHANGE THIS to your user input!
+    user_query = "What is the formula used to calculate the OH processing stage index stgIx?"  
     context = []
     collection = None # Initialize it to None first!
     query_list = [] # Initialize query_list here!
@@ -396,22 +397,19 @@ if __name__ == "__main__":
     # ========================================
     if context: # Only run if we successfully gathered context data
         print("\n[PHASE 3/3] Generating Final Answer...")
-        # MOCK DATA FOR TESTING (Replace with your actual pipeline flow)
-        mock_user_query = "What embedded server is used"
-
 
         # Context simulates extracting specific process details from both sources
         mock_context = [
               {
-                "document": "The artifact spring-boot-starter-web is for Spring Web MVC, RESTful webservices and embedded Tomcat server.",
-                "metadatas": "Source: Configure Maven Dependencies"
+                "document": "The index (stgIx) is calculated using the following formula: stgIx = (blkIx * 8) + stgOfs. Here, blkIx is the OH block index, and stgOfs is the processing stage offset",
+                "metadatas": { "source_file": "Slides.pdf", "page_number": 401, "topic": "5.3.6 Table indexing"}
               }
         ]
     # 2. RUN THE LOGIC, passing the client object to the function
         
         print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         try:
-            final_answer = generate_answer(user_query, context)
+            final_answer = generate_answer(user_query, mock_context)
         except Exception as e:
             # If generating the answer fails completely (e.g., missing API key at the highest level)
             print(f"\n? FATAL ERROR in main execution loop: {e}")
