@@ -112,10 +112,8 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
         }
     ]
 
-    print("\n[--- Calling OpenAI API ---]")
+    print("\n[--- Calling LM Studio API ---]")
 
-    '''MAX_ATTEMPTS = 3
-    for attempt in range(1, MAX_ATTEMPTS + 1):'''
     try:
         # The client sends the request to localhost instead of OpenAI's servers
         response = openai_client.chat.completions.create(
@@ -126,20 +124,7 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
         return response.choices[0].message.content
     except Exception as e:
             error_msg = str(e)
-            '''if "503" in error_msg or "UNAVAILABLE" in error_msg or "RATE_LIMIT" in error_msg:
-                if attempt < MAX_ATTEMPTS:
-                    wait_time = 2 ** attempt # Exponential backoff (2s, 4s, 8s...)
-                    print(f"\n?? Service temporarily unavailable ({error_msg[:50]}...). Retrying in {wait_time} seconds... (Attempt {attempt}/{MAX_ATTEMPTS})")
-                    time.sleep(wait_time)
-                else:
-                    # Failed after all retries
-                    print("\n?? Maximum retry attempts reached for service unavailability.")
-                    break # Exit the loop to fail gracefully below
-            else:
-                # This is a different, fatal error (like bad credentials or wrong model name). Do not retry.'''
-            raise e 
-                
-    '''return "I apologize, but the knowledge base connection is currently unstable. Please try running this process again in a few minutes."'''
+            raise e
 
 def upsert_to_vectorstore(chunks, embeddings, metadatas):
     """Upserts document content and embeddings into ChromaDB using guaranteed unique IDs."""
@@ -187,7 +172,6 @@ def upsert_to_vectorstore(chunks, embeddings, metadatas):
 # =====================================================================
 
 def run_pipeline():
-    """Orchestrates the entire robust document ingestion process."""
     global documents, chunks
     documents = [] 
     chunks = []    
@@ -268,7 +252,7 @@ if __name__ == "__main__":
     # PHASE 1: SETUP & CONNECTION (MUST RUN FIRST)
     # ========================================
     try:
-        print("\n[PHASE 1/3] Establishing Database Connection...")
+        print("\n[PHASE 1/4] Establishing Database Connection...")
         client = chromadb.PersistentClient(path="./chroma_db") # Uses the folder INSIDE C:\ai\
         COLLECTION_NAME = "rag_knowledge_base" 
 
@@ -285,7 +269,7 @@ if __name__ == "__main__":
     # PHASE 2: EMBEDDING GENERATION (BAAI BGE)
     # ========================================
     try:
-        print("\n[PHASE 1.5/3] Loading Embedding Model & Generating Embeddings...")
+        print("\n[PHASE 2/4] Loading Embedding Model & Generating Embeddings...")
         
         # 1. Load the specific BAAI model
         model_name = 'BAAI/bge-small-en-v1.5'
@@ -296,10 +280,10 @@ if __name__ == "__main__":
         
         # ChromaDB expects the embeddings as a list of lists/arrays
         query_list = [embeddings_result] # We wrap it in a list to match expected format for .query()
-        print("? Phase 1.5 Success: Embeddings generated and stored in 'query_list'.")
+        print("? Phase 2 Success: Embeddings generated and stored in 'query_list'.")
 
     except Exception as e:
-        print(f"? ERROR during Phase 1.5 Embedding Generation: {e}")
+        print(f"? ERROR during Phase 2 Embedding Generation: {e}")
         # If embedding fails, we cannot proceed to query.
         exit()
 
@@ -308,7 +292,7 @@ if __name__ == "__main__":
     # ========================================
     if collection: # Check if the connection was successfully made in Phase 1
         try:
-            print("\n[PHASE 2/3] Querying Knowledge Base...")
+            print("\n[PHASE 3/4] Querying Knowledge Base...")
             
             # !!! IMPORTANT: Make sure query_list is defined somewhere above this block !!!
             results = collection.query(
@@ -317,7 +301,7 @@ if __name__ == "__main__":
                 include=['documents', 'metadatas'] 
             )
 
-            print("? Phase 2 Success: Context retrieved.")
+            print("? Phase 3 Success: Context retrieved.")
             
             # Context Extraction Logic (Fixes the original NameError)
             retrieved_documents = results['documents']
@@ -335,14 +319,14 @@ if __name__ == "__main__":
             print(f"? ERROR during Phase 2 Retrieval: {e}")
             context = [] # Reset context on failure
     else:
-        print("\n[PHASE 2/3] SKIPPED because database connection failed in Phase 1.")
+        print("\n[PHASE 3/4] SKIPPED because database connection failed in Phase 3.")
 
 
     # ========================================
     # PHASE 4: ANSWER GENERATION (Uses 'context' from Phase 2)
     # ========================================
     if context: # Only run if we successfully gathered context data
-        print("\n[PHASE 3/3] Generating Final Answer...")
+        print("\n[PHASE 4/4] Generating Final Answer...")
 
         try:
             final_answer = generate_answer(user_query, context)
@@ -358,4 +342,4 @@ if __name__ == "__main__":
         print(final_answer)
         print("="*50)
     else:
-        print("\n[PHASE 3/3] SKIPPED. Cannot generate an answer without context.")
+        print("\n[PHASE 4/4] SKIPPED. Cannot generate an answer without context.")
