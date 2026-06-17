@@ -6,10 +6,11 @@ Document Loader: To read PDF files.
 Vector Store & Embeddings: To convert text into searchable numerical meaning (the "Context").
 LLM Chain: To take the retrieved context and formulate a final, accurate answer (The Prompt).
 
-pip install chromadb sentence-transformers google-genai langchain_community pypdf
-
-
 git clone https://github.com/haidong1965/pdf_bot_demo
+
+cd pdf_bot_demo
+
+pip install chromadb sentence-transformers google-genai langchain_community pypdf
 
 python -m venv my_rag_project_venv
 
