@@ -10,5 +10,7 @@ pip install chromadb sentence-transformers google-genai langchain_community pypd
 
 
 git clone https://github.com/haidong1965/pdf_bot_demo
+
 python -m venv my_rag_project_venv
+
 my_rag_project_venv\Scripts\activate.bat
