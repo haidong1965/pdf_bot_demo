@@ -1,27 +1,16 @@
 # -*- coding: utf-8 -*-
 
 import sys
-from sentence_transformers import SentenceTransformer 
 import os
-from pathlib import Path
 import time 
-import chromadb # Make sure to import the library
+import chromadb
+
+from sentence_transformers import SentenceTransformer 
+from pathlib import Path
 from dotenv import load_dotenv
 from google import genai # <-- Import the correct library
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError 
-
-load_dotenv()
-API_KEY = os.getenv("GEMINI_API_KEY")
-os.environ['HF_TOKEN'] ="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"
-
-current_directory = Path.cwd()
-print("Current Working Directory (absolute path):", current_directory)
-
-folder_to_append = 'pdf'
-full_path = os.path.join(current_directory, folder_to_append)
-
-if not API_KEY:
-    raise ValueError("GEMINI_API_KEY not found. Please check your .env file.")
+from chromadb import Client 
 
 try:
     from langchain_community.document_loaders import PyPDFLoader # Loader for PDFs
@@ -37,7 +26,17 @@ except ImportError:
     except ImportError as e:
          print(f"?? CRITICAL FAILURE: Cannot locate Text Splitter class in any known path. Error: {e}")
 
-from chromadb import Client 
+load_dotenv()
+API_KEY = os.getenv("GEMINI_API_KEY")
+if not API_KEY:
+    raise ValueError("GEMINI_API_KEY not found. Please check your .env file.")
+
+os.environ['HF_TOKEN'] ="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"
+
+current_directory = Path.cwd()
+folder_to_append = 'pdf'
+full_path = os.path.join(current_directory, folder_to_append)
+PDF_DIR = Path(full_path) 
 
 # --- LOCAL EMBEDDING MODEL INITIALIZATION ---
 try:
@@ -52,19 +51,12 @@ except Exception as e:
 vector_store_client = None
 
 try:
-    # Initialize ChromaDB client for local use
     vector_store_client = Client() 
     print("? ChromaDB Client initialized successfully (local instance).")
 except Exception as e:
     print(f"? ERROR initializing ChromaDB client: {e}")
 
-PDF_DIR = Path(full_path) 
-
 EMBEDDING_MODEL_NAME = "text-embedding-ada-002" 
-# =====================================================================
-# !!! CORE FUNCTIONS (REMAINING LOGIC - UNCHANGED) !!!
-# =====================================================================
-
 def generate_embeddings(chunks):
     """Generates embeddings for a list of chunks using the local BGE model."""
     if not local_model:
@@ -72,8 +64,6 @@ def generate_embeddings(chunks):
         return None
 
     texts_to_embed = [chunk.page_content for chunk in chunks]
-    
-    # *** FIX APPLIED HERE ***
     # Use the constant name instead of calling a non-existent method on the object
     print(f"\n--- Generating {len(texts_to_embed)} Embeddings using BGE Model ({EMBEDDING_MODEL_NAME}) ---")
     
@@ -111,8 +101,7 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
     """
     gemini_client = genai.Client(api_key=API_KEY) 
 
-    # --- APPLYING RETRY LOGIC HERE ---
-    MAX_ATTEMPTS = 5
+    MAX_ATTEMPTS = 3
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             chat = gemini_client.chats.create(model='gemini-2.5-flash') 
@@ -124,7 +113,6 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
 
         except Exception as e:
             error_msg = str(e)
-            # Check for common service unavailability indicators (like rate limits or server overload)
             if "503" in error_msg or "UNAVAILABLE" in error_msg or "RATE_LIMIT" in error_msg:
                 if attempt < MAX_ATTEMPTS:
                     wait_time = 2 ** attempt # Exponential backoff (2s, 4s, 8s...)
@@ -138,7 +126,6 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
                 # This is a different, fatal error (like bad credentials or wrong model name). Do not retry.
                 raise e 
 
-    # If the loop finishes without returning, it means all retries failed due to service errors.
     return "I apologize, but the knowledge base connection is currently unstable. Please try running this process again in a few minutes."
 
 def upsert_to_vectorstore(chunks, embeddings, metadatas):
@@ -229,7 +216,6 @@ def run_pipeline():
         print("\n[SKIP] No documents were loaded; skipping chunking.")
 
     # --- STEP 4: EMBEDDING & UPSERTING (The final, critical step) ---
-        # ... inside run_pipeline() ...
     if chunks and local_model: # Check if the model object exists
         print("\n[STAGE 3/4] Generating Embeddings...")
         embeddings = generate_embeddings(chunks) # <<< NOTICE: No client argument passed!
@@ -238,7 +224,6 @@ def run_pipeline():
         print("\n[?? HALT] Embedding generation failed. Cannot proceed to storage.")
         return # Exit the pipeline gracefully
     else:
-        # ... rest of the function remains largely the same, but remove dependency on OpenAI initialization checks
         print("[STAGE 4/4] Storing Data...")
         # 1. Extract the list of metadata dictionaries from your chunks list
         metadata_list = [c.metadata for c in chunks] 
@@ -346,16 +331,8 @@ if __name__ == "__main__":
     if context: # Only run if we successfully gathered context data
         print("\n[PHASE 3/3] Generating Final Answer...")
 
-        # Context simulates extracting specific process details from both sources
-        mock_context = [
-              {
-                "document": "The index (stgIx) is calculated using the following formula: stgIx = (blkIx * 8) + stgOfs. Here, blkIx is the OH block index, and stgOfs is the processing stage offset",
-                "metadatas": { "source_file": "Slides.pdf", "page_number": 401, "topic": "5.3.6 Table indexing"}
-              }
-        ]
-    # 2. RUN THE LOGIC, passing the client object to the function
         try:
-            final_answer = generate_answer(user_query, mock_context)
+            final_answer = generate_answer(user_query, context)
         except Exception as e:
             # If generating the answer fails completely (e.g., missing API key at the highest level)
             print(f"\n? FATAL ERROR in main execution loop: {e}")
