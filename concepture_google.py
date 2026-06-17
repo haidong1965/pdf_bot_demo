@@ -61,7 +61,7 @@ except Exception as e:
 # !!! CONFIGURATION AREA (MANUALLY EDIT THESE) !!!
 # =====================================================================
 
-PDF_DIR = Path(r"C:\pdf_bot_demo\pdf") # <<< ?? CHANGE THIS PATH! ??
+PDF_DIR = Path(r"C:\python_apps\pdf_bot_demo\pdf") # <<< ?? CHANGE THIS PATH! ??
 
 EMBEDDING_MODEL_NAME = "text-embedding-ada-002" 
 # =====================================================================
