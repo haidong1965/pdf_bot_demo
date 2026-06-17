@@ -29,6 +29,8 @@ OPENAI_API_KEY = "sk-proj-nY-5lXpiOM5DidkJp0Nq5CB-4ReFzWk1cHNucnH-i5tnVdM904ySYe
 
 os.environ['HF_TOKEN'] ="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"
 
+LOCAL_LM_STUDIO_BASE_URL = "http://192.168.1.81:1234/v1" 
+
 current_directory = Path.cwd()
 folder_to_append = 'pdf'
 full_path = os.path.join(current_directory, folder_to_append)
@@ -94,7 +96,10 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
         "you MUST respond with: 'I do not have enough information in the provided documents to answer that.' "
         "Do not use any external knowledge."
     )
-    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    openai_client =  OpenAI(
+        api_key="lm-studio",
+        base_url=LOCAL_LM_STUDIO_BASE_URL 
+        )
 
     messages = [
         {"role": "system", "content": system_prompt},  # Sets the rules first
@@ -112,15 +117,13 @@ def generate_answer(user_query: str, context: list[dict]) -> str:
     '''MAX_ATTEMPTS = 3
     for attempt in range(1, MAX_ATTEMPTS + 1):'''
     try:
-            response = openai_client.chat.completions.create(
-            model="gpt-4o", 
+        # The client sends the request to localhost instead of OpenAI's servers
+        response = openai_client.chat.completions.create(
+            model="llama-3.2-3b-instruct", # You can use the model name you are running
             messages=messages,
-            temperature=0.1 
-            )
-        
-            # Extract and return the clean text content
-            return response.choices[0].message.content
-
+            temperature=0.1
+        )
+        return response.choices[0].message.content
     except Exception as e:
             error_msg = str(e)
             '''if "503" in error_msg or "UNAVAILABLE" in error_msg or "RATE_LIMIT" in error_msg:
