@@ -10,7 +10,9 @@ git clone https://github.com/haidong1965/pdf_bot_demo
 
 cd pdf_bot_demo
 
-pip install chromadb sentence-transformers google-genai langchain_community pypdf
+pip install chromadb google-genai langchain_community pypdf
+
+pip install  sentence-transformers
 
 python -m venv my_rag_project_venv
 
