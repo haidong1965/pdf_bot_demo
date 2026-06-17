@@ -1,19 +1,24 @@
 # -*- coding: utf-8 -*-
 
+import sys
 from sentence_transformers import SentenceTransformer 
 import os
 from pathlib import Path
 import time 
 import chromadb # Make sure to import the library
-
 from dotenv import load_dotenv
 from google import genai # <-- Import the correct library
-
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError 
 
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
 os.environ['HF_TOKEN'] ="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"
+
+current_directory = Path.cwd()
+print("Current Working Directory (absolute path):", current_directory)
+
+folder_to_append = 'pdf'
+full_path = os.path.join(current_directory, folder_to_append)
 
 if not API_KEY:
     raise ValueError("GEMINI_API_KEY not found. Please check your .env file.")
@@ -44,11 +49,8 @@ except Exception as e:
     print(f"? ERROR initializing local model: {e}. Embedding functionality will fail.")
     local_model = None
 
-# REMOVE OR COMMENT OUT THE LINE: openai_client = OpenAI() 
+vector_store_client = None
 
-
-
-vector_store_client = None # This assignment is now safe because it's outside any open try/catch block!
 try:
     # Initialize ChromaDB client for local use
     vector_store_client = Client() 
@@ -56,12 +58,7 @@ try:
 except Exception as e:
     print(f"? ERROR initializing ChromaDB client: {e}")
 
-
-# =====================================================================
-# !!! CONFIGURATION AREA (MANUALLY EDIT THESE) !!!
-# =====================================================================
-
-PDF_DIR = Path(r"C:\python_apps\pdf_bot_demo\pdf") # <<< ?? CHANGE THIS PATH! ??
+PDF_DIR = Path(full_path) 
 
 EMBEDDING_MODEL_NAME = "text-embedding-ada-002" 
 # =====================================================================
@@ -198,7 +195,8 @@ def run_pipeline():
     print("\n" + "=" * 80)
     print("?? STARTING RAG PIPELINE: Document Ingestion Pipeline")
     print("=" * 80)
-
+    
+    print(PDF_DIR)
     # --- STEP 1 & 2: LOAD DOCUMENTS (PDFs) ---
     all_pdf_paths = list(PDF_DIR.glob("*.pdf"))
 
@@ -214,6 +212,7 @@ def run_pipeline():
                  print(f"?? SKIPPED {pdf_path.name}: Failed to load PDF. Error: {e}")
     else:
         print("\n[FATAL] NO FILES FOUND: Please check the path defined in PDF_DIR.")
+        sys.exit(0)
 
     # --- STEP 3: CHUNKING ---
     if documents and len(documents) > 0:
