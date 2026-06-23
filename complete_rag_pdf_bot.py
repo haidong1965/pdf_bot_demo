@@ -25,8 +25,6 @@ except ImportError:
 
 # --- CONFIGURATION MANAGEMENT (Centralized) ---
 
-os.environ['HF_TOKEN'] = "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"
-
 LOCAL_LM_STUDIO_BASE_URL = "http://192.168.1.81:1234/v1" 
 PDF_DIR_NAME = 'pdf' # Use a constant name for the directory
 
