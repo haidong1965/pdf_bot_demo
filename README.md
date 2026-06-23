@@ -14,7 +14,7 @@ python -m venv my_rag_project_venv
 
 my_rag_project_venv\Scripts\activate.bat
 
-pip install chromadb google-genai langchain_community pypdf sentence-transformers
+pip install chromadb google-genai langchain_community pypdf sentence-transformers openai
 
 
 
