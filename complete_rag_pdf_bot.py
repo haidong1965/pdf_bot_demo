@@ -306,7 +306,7 @@ if __name__ == "__main__":
     print("\n\n" + "#"*10 + " STARTING QUERY PHASE " + "#"*10)
 
     if indexing_successful:
-        rag_system = RAGSystem(query_user="What is the formula used to calculate the OH processing stage index stgIx?")
+        rag_system = RAGSystem(query_user="What is the Microphone sensitivity?")
         context = rag_system.connect_and_retrieve()
         
         final_answer = "Could not generate an answer due to a critical system failure."
