@@ -25,7 +25,7 @@ except ImportError:
 
 # --- CONFIGURATION MANAGEMENT (Centralized) ---
 
-LOCAL_LM_STUDIO_BASE_URL = "http://192.168.1.81:1234/v1" 
+LOCAL_LM_STUDIO_BASE_URL = "http://192.168.8.111:1234/v1" 
 PDF_DIR_NAME = 'pdf' # Use a constant name for the directory
 
 # --- INITIALIZATION & GLOBAL SETUP ---
